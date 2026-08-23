@@ -1,0 +1,13 @@
+# PyTorch is supplied by the NVIDIA base image selected in Dockerfile.
+Flask>=3.0,<4.0
+accelerate==1.4.0
+diffusers==0.33.1
+einops>=0.8.0,<1.0
+ftfy==6.3.1
+numpy>=1.26,<2.0
+Pillow>=10.0,<12.0
+transformers==4.51.0
+
+# When using an InternVLA-N1 checkpoint with NavDP system-1, install the
+# lightweight package itself separately with --no-deps:
+# diffusion_policy @ git+https://github.com/real-stanford/diffusion_policy.git@5ba07ac6661db573af695b419a7947ecb704690f

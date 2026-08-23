@@ -15,11 +15,17 @@ idx = 0
 start_time = time.time()
 output_dir = ''
 runtime_args = None
+agent = None
 DEFAULT_INSTRUCTION = (
     "Turn around and walk out of this office. Turn towards your slight right at the chair. "
     "Move forward to the walkway and go near the red bin. You can see an open door on your right side, "
     "go inside the open door. Stop at the computer monitor"
 )
+
+
+@app.route("/health", methods=['GET'])
+def health():
+    return jsonify({'status': 'ok', 'model_loaded': agent is not None})
 
 
 @app.route("/eval_dual", methods=['POST'])
@@ -107,9 +113,16 @@ if __name__ == '__main__':
     parser.add_argument("--num_history", type=int, default=8)
     parser.add_argument("--plan_step_gap", type=int, default=3)
     parser.add_argument(
+        "--attn-implementation",
+        type=str,
+        default=os.environ.get("INTERNVLA_ATTN_IMPLEMENTATION", "flash_attention_2"),
+        choices=("flash_attention_2", "sdpa", "eager"),
+        help="Transformers attention backend. Use sdpa when FlashAttention is unavailable.",
+    )
+    parser.add_argument(
         "--instruction",
         type=str,
-        default=os.environ.get("INTERNVLA_INSTRUCTION", DEFAULT_INSTRUCTION),
+        default=os.environ.get("INTERNVLA_INSTRUCTION") or DEFAULT_INSTRUCTION,
         help="Fallback instruction used when the client does not send one.",
     )
     parser.add_argument("--host", type=str, default="0.0.0.0")

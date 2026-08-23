@@ -1,0 +1,51 @@
+services:
+  model-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${INTERNVLA_BASE_IMAGE:-nvcr.io/nvidia/pytorch:25.02-py3}
+        INSTALL_FLASH_ATTN: ${INSTALL_FLASH_ATTN:-0}
+    image: internnav-model-server:latest
+    restart: unless-stopped
+    init: true
+    working_dir: /app
+    shm_size: 8gb
+    runtime: nvidia
+    gpus: all
+    ports:
+      - "${INTERNVLA_PORT:-5801}:5801"
+    environment:
+      HF_HOME: /models/.cache/huggingface
+      TRANSFORMERS_CACHE: /models/.cache/huggingface
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      INTERNVLA_ATTN_IMPLEMENTATION: ${INTERNVLA_ATTN_IMPLEMENTATION:-sdpa}
+      INTERNVLA_INSTRUCTION: ${INTERNVLA_INSTRUCTION:-}
+    volumes:
+      - ${CHECKPOINTS_DIR:-./checkpoints}:/app/checkpoints:ro
+      - ${HF_CACHE_DIR:-./.cache/huggingface}:/models/.cache/huggingface
+      - ${OUTPUT_DIR:-./output}:/app/output
+    command:
+      - python3
+      - scripts/realworld/http_internvla_server.py
+      - --device
+      - ${INTERNVLA_DEVICE:-cuda:0}
+      - --model_path
+      - /app/checkpoints/${MODEL_DIR:-InternVLA-N1}
+      - --plan_step_gap
+      - ${INTERNVLA_PLAN_STEP_GAP:-3}
+      - --attn-implementation
+      - ${INTERNVLA_ATTN_IMPLEMENTATION:-sdpa}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5801"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5801/health', timeout=3)"
+      interval: 20s
+      timeout: 5s
+      start_period: 10m
+      retries: 10
