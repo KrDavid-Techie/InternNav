@@ -14,6 +14,12 @@ app = Flask(__name__)
 idx = 0
 start_time = time.time()
 output_dir = ''
+runtime_args = None
+DEFAULT_INSTRUCTION = (
+    "Turn around and walk out of this office. Turn towards your slight right at the chair. "
+    "Move forward to the walkway and go near the red bin. You can see an open door on your right side, "
+    "go inside the open door. Stop at the computer monitor"
+)
 
 
 @app.route("/eval_dual", methods=['POST'])
@@ -37,7 +43,21 @@ def eval_dual():
     print(f"read http data cost {time.time() - start_time}")
 
     camera_pose = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
-    instruction = "Turn around and walk out of this office. Turn towards your slight right at the chair. Move forward to the walkway and go near the red bin. You can see an open door on your right side, go inside the open door. Stop at the computer monitor"
+    instruction = str(data.get('instruction') or runtime_args.instruction).strip()
+    if not instruction:
+        return jsonify({'error': 'No navigation instruction was provided'}), 400
+
+    camera_intrinsic = data.get('camera_intrinsic')
+    if camera_intrinsic is not None:
+        camera_intrinsic = np.asarray(camera_intrinsic, dtype=np.float32)
+        if camera_intrinsic.shape not in ((3, 3), (4, 4)):
+            camera_intrinsic = None
+    if camera_intrinsic is None:
+        camera_intrinsic = runtime_args.camera_intrinsic
+    elif camera_intrinsic.shape == (3, 3):
+        expanded = np.eye(4, dtype=np.float32)
+        expanded[:3, :3] = camera_intrinsic
+        camera_intrinsic = expanded
     policy_init = data['reset']
     if policy_init:
         start_time = time.time()
@@ -54,12 +74,12 @@ def eval_dual():
     dual_sys_output = {}
 
     dual_sys_output = agent.step(
-        image, depth, camera_pose, instruction, intrinsic=args.camera_intrinsic, look_down=look_down
+        image, depth, camera_pose, instruction, intrinsic=camera_intrinsic, look_down=look_down
     )
     if dual_sys_output.output_action is not None and dual_sys_output.output_action == [5]:
         look_down = True
         dual_sys_output = agent.step(
-            image, depth, camera_pose, instruction, intrinsic=args.camera_intrinsic, look_down=look_down
+            image, depth, camera_pose, instruction, intrinsic=camera_intrinsic, look_down=look_down
         )
 
     json_output = {}
@@ -85,7 +105,17 @@ if __name__ == '__main__':
     parser.add_argument("--resize_w", type=int, default=384)
     parser.add_argument("--resize_h", type=int, default=384)
     parser.add_argument("--num_history", type=int, default=8)
+    parser.add_argument("--plan_step_gap", type=int, default=3)
+    parser.add_argument(
+        "--instruction",
+        type=str,
+        default=os.environ.get("INTERNVLA_INSTRUCTION", DEFAULT_INSTRUCTION),
+        help="Fallback instruction used when the client does not send one.",
+    )
+    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=5801)
     args = parser.parse_args()
+    runtime_args = args
 
     args.camera_intrinsic = np.array(
         [[386.5, 0.0, 328.9, 0.0], [0.0, 386.5, 244, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
@@ -99,4 +129,4 @@ if __name__ == '__main__':
     )
     agent.reset()
 
-    app.run(host='0.0.0.0', port=5801)
+    app.run(host=args.host, port=args.port)
