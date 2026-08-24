@@ -139,6 +139,7 @@ if __name__ == '__main__':
         np.zeros((480, 640)),
         np.eye(4),
         "hello",
+        args.camera_intrinsic,
     )
     agent.reset()
 

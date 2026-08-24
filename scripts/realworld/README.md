@@ -21,7 +21,7 @@ The checkpoint directory must contain the model directory and the DepthAnything 
 
 ```text
 checkpoints/
-├── InternVLA-N1/
+├── InternVLA-N1-DualVLN/
 └── depth_anything_v2_metric_hypersim_vits.pth
 ```
 
@@ -51,7 +51,7 @@ Run this on the machine with the InternVLA-N1 checkpoint:
 ```bash
 python3 scripts/realworld/http_internvla_server.py \
   --device cuda:0 \
-  --model_path checkpoints/InternVLA-N1 \
+  --model_path checkpoints/InternVLA-N1-DualVLN \
   --plan_step_gap 3
 ```
 
@@ -65,7 +65,12 @@ source /ros_ws/install/setup.bash
 
 python3 scripts/realworld/a2_internvla_client.py \
   --server-url http://MODEL_SERVER_IP:5801/eval_dual \
-  --instruction "Go forward to the red chair, turn left, and stop near the doorway."
+  --instruction "Move forward a short distance and stop." \
+  --max-linear-velocity 0.10 \
+  --max-angular-velocity 0.15 \
+  --request-timeout 120
 ```
 
 The released InternVLA-N1 checkpoint was trained primarily with English instructions, so English prompts are recommended for the first hardware test. If `/grit_slam/odometry` is not publishing, the client stays stopped and logs the missing observation rather than sending motion commands.
+
+For the first hardware test, lift the robot or use a clear area with an operator ready to trigger the emergency stop. Before starting the client, verify that the camera and odometry topics are publishing and that `/a2_control` has a subscriber. Pressing `Ctrl+C` makes the client publish three zero-velocity commands before it exits.

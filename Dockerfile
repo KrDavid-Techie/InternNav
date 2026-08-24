@@ -40,4 +40,4 @@ RUN python3 -m pip install --no-deps --editable . \
 
 EXPOSE 5801
 
-CMD ["python3", "scripts/realworld/http_internvla_server.py", "--device", "cuda:0", "--model_path", "/app/checkpoints/InternVLA-N1", "--attn-implementation", "sdpa", "--host", "0.0.0.0", "--port", "5801"]
+CMD ["python3", "scripts/realworld/http_internvla_server.py", "--device", "cuda:0", "--model_path", "/app/checkpoints/InternVLA-N1-DualVLN", "--attn-implementation", "sdpa", "--host", "0.0.0.0", "--port", "5801"]

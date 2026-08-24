@@ -32,7 +32,7 @@ services:
       - --device
       - ${INTERNVLA_DEVICE:-cuda:0}
       - --model_path
-      - /app/checkpoints/${MODEL_DIR:-InternVLA-N1}
+      - /app/checkpoints/${MODEL_DIR:-InternVLA-N1-DualVLN}
       - --plan_step_gap
       - ${INTERNVLA_PLAN_STEP_GAP:-3}
       - --attn-implementation
