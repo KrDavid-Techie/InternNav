@@ -24,12 +24,19 @@ RUN apt-get update \
 
 COPY requirements/model_server.txt requirements/model_server.txt
 
-RUN python3 -m pip install --upgrade pip setuptools wheel \
-    && python3 -m pip install --no-cache-dir --force-reinstall \
-        "${TORCH_WHEEL_URL}" \
-    && python3 -m pip install --no-cache-dir --no-deps \
-        "diffusion_policy @ git+https://github.com/real-stanford/diffusion_policy.git@5ba07ac6661db573af695b419a7947ecb704690f" \
-    && python3 -m pip install --no-cache-dir -r requirements/model_server.txt
+RUN python3 -m pip install --upgrade pip "setuptools<80" wheel
+
+RUN python3 -m pip install --no-cache-dir --force-reinstall \
+    "${TORCH_WHEEL_URL}"
+
+RUN python3 -m pip install --no-cache-dir --no-deps \
+    "diffusion_policy @ git+https://github.com/real-stanford/diffusion_policy.git@5ba07ac6661db573af695b419a7947ecb704690f"
+
+# cobiz:jetson ships blinker as a distutils-managed Ubuntu package. Install a
+# pip-managed copy first so the requirements step does not try to uninstall it.
+RUN python3 -m pip install --no-cache-dir --ignore-installed "blinker>=1.9,<2.0"
+
+RUN python3 -m pip install --no-cache-dir -r requirements/model_server.txt
 
 # FlashAttention is optional. Jetson/aarch64 deployments generally use the
 # Transformers SDPA backend instead; set INSTALL_FLASH_ATTN=1 only when a
