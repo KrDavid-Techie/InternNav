@@ -3,6 +3,7 @@ FROM ${BASE_IMAGE}
 
 ARG INSTALL_FLASH_ATTN=0
 ARG TORCH_WHEEL_URL=https://download-r2.pytorch.org/whl/cu126/torch-2.6.0%2Bcu126-cp310-cp310-linux_aarch64.whl
+ARG TORCHVISION_WHEEL_URL=https://download-r2.pytorch.org/whl/cu126/torchvision-0.21.0-cp310-cp310-linux_aarch64.whl
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -29,6 +30,11 @@ RUN python3 -m pip install --upgrade pip "setuptools<80" wheel
 RUN python3 -m pip install --no-cache-dir --force-reinstall \
     "${TORCH_WHEEL_URL}"
 
+# Keep torchvision paired with the Jetson/aarch64 PyTorch wheel. --no-deps
+# prevents pip from replacing the CUDA-enabled torch package.
+RUN python3 -m pip install --no-cache-dir --no-deps \
+    "${TORCHVISION_WHEEL_URL}"
+
 RUN python3 -m pip install --no-cache-dir --no-deps \
     "diffusion_policy @ git+https://github.com/real-stanford/diffusion_policy.git@5ba07ac6661db573af695b419a7947ecb704690f"
 
@@ -47,7 +53,7 @@ RUN if [ "${INSTALL_FLASH_ATTN}" = "1" ]; then \
 
 COPY . .
 RUN python3 -m pip install --no-deps --editable . \
-    && python3 -c "import torch; assert torch.__version__.startswith('2.6.0'), torch.__version__; import transformers; import diffusers; import internnav.agent.internvla_n1_agent_realworld; print('InternNav model-server imports OK:', torch.__version__, torch.version.cuda)"
+    && python3 -c "import torch; assert torch.__version__.startswith('2.6.0'), torch.__version__; import torchvision; assert torchvision.__version__.startswith('0.21.0'), torchvision.__version__; import transformers; import diffusers; import internnav.agent.internvla_n1_agent_realworld; print('InternNav model-server imports OK:', torch.__version__, torchvision.__version__, torch.version.cuda)"
 
 EXPOSE 5801
 

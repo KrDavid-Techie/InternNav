@@ -1,4 +1,5 @@
-# PyTorch is supplied by the NVIDIA base image selected in Dockerfile.
+# PyTorch and torchvision are installed as matched Jetson/aarch64 wheels in
+# Dockerfile so pip cannot replace them with incompatible packages.
 Flask>=3.0,<4.0
 accelerate==1.4.0
 diffusers==0.33.1
