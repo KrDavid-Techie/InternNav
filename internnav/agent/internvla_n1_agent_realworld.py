@@ -1,6 +1,5 @@
 import copy
 import itertools
-import os
 import re
 import sys
 import time
@@ -26,7 +25,10 @@ DEFAULT_IMAGE_TOKEN = "<image>"
 class InternVLAN1AsyncAgent:
     def __init__(self, args):
         self.device = torch.device(args.device)
-        self.save_dir = "test_data/" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        debug_output_dir = str(getattr(args, 'debug_output_dir', '') or '').strip()
+        self.debug_output_root = Path(debug_output_dir).expanduser() if debug_output_dir else None
+        self.save_dir = None
+        self._start_debug_run()
         print(f"args.model_path{args.model_path}")
         self.model = InternVLAN1ForCausalLM.from_pretrained(
             args.model_path,
@@ -84,6 +86,21 @@ class InternVLAN1AsyncAgent:
         self.pixel_goal_rgb = None
         self.pixel_goal_depth = None
 
+    def _start_debug_run(self):
+        if self.debug_output_root is None:
+            self.save_dir = None
+            return
+        self.save_dir = self.debug_output_root / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+
+    def _save_debug_image(self, image, filename):
+        if self.save_dir is not None:
+            image.save(self.save_dir / filename)
+
+    def _save_debug_text(self, text, filename):
+        if self.save_dir is not None:
+            (self.save_dir / filename).write_text(text, encoding='utf-8')
+
     def reset(self):
         self.rgb_list = []
         self.depth_list = []
@@ -99,8 +116,7 @@ class InternVLAN1AsyncAgent:
         self.pixel_goal_rgb = None
         self.pixel_goal_depth = None
 
-        self.save_dir = "test_data/" + datetime.now().strftime("%Y%m%d_%H%M%S")
-        os.makedirs(self.save_dir, exist_ok=True)
+        self._start_debug_run()
 
     def parse_actions(self, output):
         action_patterns = '|'.join(re.escape(action) for action in self.actions2idx)
@@ -114,7 +130,7 @@ class InternVLAN1AsyncAgent:
         image = Image.fromarray(rgb).convert('RGB')
         image = image.resize((self.resize_w, self.resize_h))
         self.rgb_list.append(image)
-        image.save(f"{self.save_dir}/debug_raw_{self.episode_idx: 04d}.jpg")
+        self._save_debug_image(image, f"debug_raw_{self.episode_idx: 04d}.jpg")
         self.episode_idx += 1
 
     def trajectory_tovw(self, trajectory, kp=1.0):
@@ -168,9 +184,9 @@ class InternVLAN1AsyncAgent:
         if not look_down:
             image = image.resize((self.resize_w, self.resize_h))
             self.rgb_list.append(image)
-            image.save(f"{self.save_dir}/debug_raw_{self.episode_idx: 04d}.jpg")
+            self._save_debug_image(image, f"debug_raw_{self.episode_idx: 04d}.jpg")
         else:
-            image.save(f"{self.save_dir}/debug_raw_{self.episode_idx: 04d}_look_down.jpg")
+            self._save_debug_image(image, f"debug_raw_{self.episode_idx: 04d}_look_down.jpg")
         if not look_down:
             self.conversation_history = []
             self.past_key_values = None
@@ -233,14 +249,22 @@ class InternVLAN1AsyncAgent:
         self.llm_output = self.processor.tokenizer.decode(
             output_ids[0][inputs.input_ids.shape[1] :], skip_special_tokens=True
         )
-        with open(f"{self.save_dir}/llm_output_{self.episode_idx: 04d}.txt", 'w') as f:
-            f.write(self.llm_output)
+        self._save_debug_text(self.llm_output, f"llm_output_{self.episode_idx: 04d}.txt")
         self.last_output_ids = copy.deepcopy(output_ids[0])
         self.past_key_values = copy.deepcopy(outputs.past_key_values)
         print(f"output {self.episode_idx}  {self.llm_output} cost: {t1 - t0}s")
-        if bool(re.search(r'\d', self.llm_output)):
-            coord = [int(c) for c in re.findall(r'\d+', self.llm_output)]
-            pixel_goal = [int(coord[1]), int(coord[0])]
+        action_seq = self.parse_actions(self.llm_output)
+        if action_seq:
+            return action_seq, None, None
+
+        coord = re.findall(r'-?\d+(?:\.\d+)?', self.llm_output)
+        if len(coord) >= 2:
+            x = int(float(coord[0]))
+            y = int(float(coord[1]))
+            pixel_goal = [
+                int(np.clip(y, 0, self.resize_h - 1)),
+                int(np.clip(x, 0, self.resize_w - 1)),
+            ]
             image_grid_thw = torch.cat([thw.unsqueeze(0) for thw in inputs.image_grid_thw], dim=0)
             pixel_values = inputs.pixel_values
             t0 = time.time()
@@ -248,9 +272,8 @@ class InternVLAN1AsyncAgent:
                 traj_latents = self.model.generate_latents(output_ids, pixel_values, image_grid_thw)
                 return None, traj_latents, pixel_goal
 
-        else:
-            action_seq = self.parse_actions(self.llm_output)
-            return action_seq, None, None
+        print(f"Unrecognized model output; stopping safely: {self.llm_output!r}")
+        return [0], None, None
 
     def step_s1(self, latent, rgb, depth):
         all_trajs = self.model.generate_traj(latent, rgb, depth)

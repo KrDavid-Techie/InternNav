@@ -1,10 +1,13 @@
-ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:25.02-py3
+ARG BASE_IMAGE=cobiz:jetson
 FROM ${BASE_IMAGE}
 
 ARG INSTALL_FLASH_ATTN=0
+ARG TORCH_WHEEL_URL=https://download-r2.pytorch.org/whl/cu126/torch-2.6.0%2Bcu126-cp310-cp310-linux_aarch64.whl
+ARG TORCHVISION_WHEEL_URL=https://download-r2.pytorch.org/whl/cu126/torchvision-0.21.0-cp310-cp310-linux_aarch64.whl
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -15,6 +18,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        libopenblas-dev \
         libgl1 \
         libglib2.0-0 \
         libgomp1 \
@@ -22,10 +26,24 @@ RUN apt-get update \
 
 COPY requirements/model_server.txt requirements/model_server.txt
 
-RUN python3 -m pip install --upgrade pip setuptools wheel \
-    && python3 -m pip install --no-cache-dir --no-deps \
-        "diffusion_policy @ git+https://github.com/real-stanford/diffusion_policy.git@5ba07ac6661db573af695b419a7947ecb704690f" \
-    && python3 -m pip install --no-cache-dir -r requirements/model_server.txt
+RUN python3 -m pip install --upgrade pip "setuptools<80" wheel
+
+RUN python3 -m pip install --no-cache-dir --force-reinstall \
+    "${TORCH_WHEEL_URL}"
+
+# Keep torchvision paired with the Jetson/aarch64 PyTorch wheel. --no-deps
+# prevents pip from replacing the CUDA-enabled torch package.
+RUN python3 -m pip install --no-cache-dir --no-deps \
+    "${TORCHVISION_WHEEL_URL}"
+
+RUN python3 -m pip install --no-cache-dir --no-deps \
+    "diffusion_policy @ git+https://github.com/real-stanford/diffusion_policy.git@5ba07ac6661db573af695b419a7947ecb704690f"
+
+# cobiz:jetson ships blinker as a distutils-managed Ubuntu package. Install a
+# pip-managed copy first so the requirements step does not try to uninstall it.
+RUN python3 -m pip install --no-cache-dir --ignore-installed "blinker>=1.9,<2.0"
+
+RUN python3 -m pip install --no-cache-dir -r requirements/model_server.txt
 
 # FlashAttention is optional. Jetson/aarch64 deployments generally use the
 # Transformers SDPA backend instead; set INSTALL_FLASH_ATTN=1 only when a
@@ -35,8 +53,7 @@ RUN if [ "${INSTALL_FLASH_ATTN}" = "1" ]; then \
     fi
 
 COPY . .
-RUN python3 -m pip install --no-deps --editable . \
-    && python3 -c "import torch; import transformers; import diffusers; import internnav.agent.internvla_n1_agent_realworld; print('InternNav model-server imports OK')"
+RUN python3 scripts/realworld/model_server_import_check.py
 
 EXPOSE 5801
 
