@@ -9,7 +9,7 @@ services:
         TORCH_WHEEL_URL: ${TORCH_WHEEL_URL:-https://download-r2.pytorch.org/whl/cu126/torch-2.6.0%2Bcu126-cp310-cp310-linux_aarch64.whl}
         TORCHVISION_WHEEL_URL: ${TORCHVISION_WHEEL_URL:-https://download-r2.pytorch.org/whl/cu126/torchvision-0.21.0-cp310-cp310-linux_aarch64.whl}
     image: internnav-model-server:latest
-    restart: unless-stopped
+    restart: "on-failure:3"
     init: true
     working_dir: /app
     shm_size: 8gb
@@ -19,15 +19,20 @@ services:
       - "${INTERNVLA_PORT:-5801}:5801"
     environment:
       HF_HOME: /models/.cache/huggingface
-      TRANSFORMERS_CACHE: /models/.cache/huggingface
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       INTERNVLA_ATTN_IMPLEMENTATION: ${INTERNVLA_ATTN_IMPLEMENTATION:-sdpa}
       INTERNVLA_INSTRUCTION: ${INTERNVLA_INSTRUCTION:-}
+      INTERNVLA_DEBUG_OUTPUT_DIR: ${INTERNVLA_DEBUG_OUTPUT_DIR:-}
     volumes:
       - ${CHECKPOINTS_DIR:-./checkpoints}:/app/checkpoints:ro
       - ${HF_CACHE_DIR:-./.cache/huggingface}:/models/.cache/huggingface
       - ${OUTPUT_DIR:-./output}:/app/output
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command:
       - python3
       - scripts/realworld/http_internvla_server.py

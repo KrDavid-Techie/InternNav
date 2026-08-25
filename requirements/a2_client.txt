@@ -1,0 +1,4 @@
+# ROS 2 Humble supplies rclpy, cv_bridge, NumPy, SciPy, Requests, and Pillow on
+# the Dangjin A2 host. Install this file with --no-deps so CasADi does not
+# replace the system NumPy used by cv_bridge.
+casadi==3.7.2

@@ -32,7 +32,15 @@ from sensor_msgs.msg import CameraInfo, Image, Joy
 from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 
-from controllers import Mpc_controller, PID_controller
+try:
+    from controllers import Mpc_controller, PID_controller
+except ModuleNotFoundError as exc:
+    if exc.name in {'casadi', 'scipy'}:
+        raise SystemExit(
+            f"Missing A2 controller dependency: {exc.name}. "
+            "Run: python3 -m pip install --user --no-deps -r requirements/a2_client.txt"
+        ) from exc
+    raise
 
 
 def stamp_to_seconds(stamp):
@@ -123,6 +131,7 @@ class A2InternVLANode(Node):
             )
 
         self.control_pub = self.create_publisher(Joy, args.control_topic, qos_profile_sensor_data)
+        self.check_control_publishers()
         self.control_timer = self.create_timer(1.0 / args.control_rate, self.publish_control)
         self.inference_thread = threading.Thread(target=self.inference_loop, daemon=True)
         self.inference_thread.start()
@@ -132,6 +141,30 @@ class A2InternVLANode(Node):
         self.get_logger().info("Publishing A2 Joy commands: %s", args.control_topic)
         self.get_logger().info("Model server: %s", args.server_url)
         self.get_logger().info("Instruction: %s", args.instruction)
+
+    def check_control_publishers(self):
+        # Give DDS graph discovery a moment to expose existing publishers.
+        time.sleep(0.25)
+        competitors = sorted(
+            {
+                f"{info.node_namespace.rstrip('/')}/{info.node_name}"
+                for info in self.get_publishers_info_by_topic(self.args.control_topic)
+                if info.node_name != self.get_name()
+            }
+        )
+        if not competitors:
+            return
+
+        message = (
+            f"Competing publisher(s) already exist on {self.args.control_topic}: "
+            f"{', '.join(competitors)}. Concurrent velocity commands are unsafe."
+        )
+        if self.args.allow_competing_control_publisher:
+            self.get_logger().warning(message)
+            return
+        raise RuntimeError(
+            message + " Stop the competing publisher or explicitly pass --allow-competing-control-publisher."
+        )
 
     def on_image(self, msg):
         try:
@@ -431,19 +464,24 @@ def parse_args():
         help="Natural-language navigation instruction. English is recommended for the released checkpoint.",
     )
     parser.add_argument("--server-url", default="http://127.0.0.1:5801/eval_dual")
-    parser.add_argument("--camera-topic", default="/a2/front_camera/res_360p/image_raw")
-    parser.add_argument("--camera-info-topic", default="/a2/front_camera/res_360p/camera_info")
+    parser.add_argument("--camera-topic", default="/a2/front_camera/image_raw")
+    parser.add_argument("--camera-info-topic", default="/a2/front_camera/camera_info")
     parser.add_argument("--depth-topic", default="", help="Optional depth topic; empty means invalid/zero depth.")
     parser.add_argument("--odom-topic", default="/grit_slam/odometry")
     parser.add_argument("--control-topic", default="/a2_control")
     parser.add_argument("--control-rate", type=float, default=10.0)
     parser.add_argument("--inference-period", type=float, default=0.05)
-    parser.add_argument("--request-timeout", type=float, default=30.0)
+    parser.add_argument("--request-timeout", type=float, default=120.0)
     parser.add_argument("--stale-timeout", type=float, default=2.0)
     parser.add_argument("--max-linear-velocity", type=float, default=0.35)
     parser.add_argument("--max-angular-velocity", type=float, default=0.40)
     parser.add_argument("--discrete-forward-distance", type=float, default=0.25)
     parser.add_argument("--discrete-turn-degrees", type=float, default=15.0)
+    parser.add_argument(
+        "--allow-competing-control-publisher",
+        action="store_true",
+        help="Allow another node to publish to the control topic (unsafe unless arbitration is configured).",
+    )
     args = parser.parse_args()
     if not args.instruction.strip():
         parser.error("--instruction is required (or set INTERNVLA_INSTRUCTION)")
@@ -453,15 +491,18 @@ def parse_args():
 def main():
     args = parse_args()
     rclpy.init()
-    node = A2InternVLANode(args)
+    node = None
     try:
+        node = A2InternVLANode(args)
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        node.stop()
-        node.destroy_node()
-        rclpy.shutdown()
+        if node is not None:
+            node.stop()
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
