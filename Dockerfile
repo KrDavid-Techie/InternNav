@@ -53,7 +53,7 @@ RUN if [ "${INSTALL_FLASH_ATTN}" = "1" ]; then \
 
 COPY . .
 RUN python3 -m pip install --no-deps --editable . \
-    && python3 -c "import torch; assert torch.__version__.startswith('2.6.0'), torch.__version__; import torchvision; assert torchvision.__version__.startswith('0.21.0'), torchvision.__version__; import transformers; import diffusers; import internnav.agent.internvla_n1_agent_realworld; print('InternNav model-server imports OK:', torch.__version__, torchvision.__version__, torch.version.cuda)"
+    && python3 -c "import torch; assert torch.__version__.startswith('2.6.0'), torch.__version__; import torchvision; assert torchvision.__version__.startswith('0.21.0'), torchvision.__version__; import transformers; import diffusers; from internnav.model.encoder.depth_anything.depth_anything_v2.dpt import DepthAnythingV2; import internnav.agent.internvla_n1_agent_realworld; print('InternNav model-server imports OK:', torch.__version__, torchvision.__version__, torch.version.cuda)"
 
 EXPOSE 5801
 
