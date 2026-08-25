@@ -4,8 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: ${INTERNVLA_BASE_IMAGE:-nvcr.io/nvidia/pytorch:25.02-py3}
+        BASE_IMAGE: ${INTERNVLA_BASE_IMAGE:-cobiz:jetson}
         INSTALL_FLASH_ATTN: ${INSTALL_FLASH_ATTN:-0}
+        TORCH_WHEEL_URL: ${TORCH_WHEEL_URL:-https://download-r2.pytorch.org/whl/cu126/torch-2.6.0%2Bcu126-cp310-cp310-linux_aarch64.whl}
     image: internnav-model-server:latest
     restart: unless-stopped
     init: true

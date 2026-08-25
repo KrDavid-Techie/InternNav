@@ -1,7 +1,8 @@
-ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:25.02-py3
+ARG BASE_IMAGE=cobiz:jetson
 FROM ${BASE_IMAGE}
 
 ARG INSTALL_FLASH_ATTN=0
+ARG TORCH_WHEEL_URL=https://download-r2.pytorch.org/whl/cu126/torch-2.6.0%2Bcu126-cp310-cp310-linux_aarch64.whl
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -15,6 +16,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        libopenblas-dev \
         libgl1 \
         libglib2.0-0 \
         libgomp1 \
@@ -23,6 +25,8 @@ RUN apt-get update \
 COPY requirements/model_server.txt requirements/model_server.txt
 
 RUN python3 -m pip install --upgrade pip setuptools wheel \
+    && python3 -m pip install --no-cache-dir --force-reinstall \
+        "${TORCH_WHEEL_URL}" \
     && python3 -m pip install --no-cache-dir --no-deps \
         "diffusion_policy @ git+https://github.com/real-stanford/diffusion_policy.git@5ba07ac6661db573af695b419a7947ecb704690f" \
     && python3 -m pip install --no-cache-dir -r requirements/model_server.txt
@@ -36,7 +40,7 @@ RUN if [ "${INSTALL_FLASH_ATTN}" = "1" ]; then \
 
 COPY . .
 RUN python3 -m pip install --no-deps --editable . \
-    && python3 -c "import torch; import transformers; import diffusers; import internnav.agent.internvla_n1_agent_realworld; print('InternNav model-server imports OK')"
+    && python3 -c "import torch; assert torch.__version__.startswith('2.6.0'), torch.__version__; import transformers; import diffusers; import internnav.agent.internvla_n1_agent_realworld; print('InternNav model-server imports OK:', torch.__version__, torch.version.cuda)"
 
 EXPOSE 5801
 

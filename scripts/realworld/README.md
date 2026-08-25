@@ -17,6 +17,10 @@ The A2 control node maps `Joy.axes[1]` to forward velocity and `Joy.axes[2]` to 
 
 Run this on the GPU machine that has the InternVLA-N1 checkpoint. The Compose service exposes the HTTP API on TCP port `5801`; the ROS client remains outside the container and connects to that port.
 
+### Using the preloaded `cobiz:jetson` image
+
+The Dangjin A2 Jetson image includes CUDA 12.6 but does not include PyTorch or the InternNav Python packages. The Compose build therefore installs the pinned CUDA 12.6/aarch64 PyTorch wheel before installing the model-server requirements. This variant assumes Python 3.10 and JetPack 6.2 compatibility; override `INTERNVLA_BASE_IMAGE` and `TORCH_WHEEL_URL` in `.env` when using a different Jetson software stack.
+
 The checkpoint directory must contain the model directory and the DepthAnything checkpoint used by the asynchronous system-1, for example:
 
 ```text
@@ -37,6 +41,8 @@ docker compose up -d --build
 curl http://127.0.0.1:5801/health
 docker compose logs -f model-server
 ```
+
+The first build with `cobiz:jetson` downloads the PyTorch wheel, but does not copy the model into the image. The checkpoint must still exist under the host `checkpoints/` directory before `docker compose up`.
 
 After the first build, `docker compose up -d` is sufficient. The default `sdpa` attention backend avoids requiring a FlashAttention wheel on Jetson; set `INTERNVLA_ATTN_IMPLEMENTATION=flash_attention_2` and `INSTALL_FLASH_ATTN=1` only when a compatible FlashAttention installation is available. The host must have NVIDIA Container Toolkit configured for GPU access.
 
